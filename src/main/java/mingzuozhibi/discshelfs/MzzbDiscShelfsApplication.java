@@ -8,10 +8,12 @@ import com.google.gson.stream.JsonWriter;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.IOException;
 import java.time.Instant;
 
+@EnableScheduling
 @SpringBootApplication
 public class MzzbDiscShelfsApplication {
 

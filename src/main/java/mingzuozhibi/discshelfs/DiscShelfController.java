@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Order;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,10 +19,21 @@ import java.util.List;
 public class DiscShelfController {
 
     @Autowired
-    private DiscShelfRepository discShelfRepository;
+    private Gson gson;
 
     @Autowired
-    private Gson gson;
+    private DiscShelfSpider discShelfSpider;
+
+    @Autowired
+    private DiscShelfRepository discShelfRepository;
+
+    @Scheduled(cron = "0 0 5/6 * * ?")
+    @GetMapping("/discShelfs/fetch")
+    public void startFetch() {
+        Thread thread = new Thread(discShelfSpider::fetchFromAmazon);
+        thread.setDaemon(true);
+        thread.start();
+    }
 
     @GetMapping("/discShelfs")
     public String findAll(@RequestParam(defaultValue = "1") int page,
