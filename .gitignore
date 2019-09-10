@@ -1,3 +1,7 @@
+### Project ###
+config/application.properties
+
+### Spring Boot ###
 HELP.md
 target/
 !.mvn/wrapper/maven-wrapper.jar
