@@ -68,24 +68,6 @@ public abstract class ChromeHelper {
         throw new RuntimeException(message, lastThrown);
     }
 
-    public static String waitRequest(String url) {
-        Exception lastThrown = null;
-        for (int retry = 0; retry < 3; retry++) {
-            try {
-                return Jsoup.connect(url)
-                        .ignoreContentType(true)
-                        .timeout(10000)
-                        .execute()
-                        .body();
-            } catch (Exception e) {
-                lastThrown = e;
-            }
-        }
-        String format = "Jsoup: 无法获取网页内容[url=%s][message=%s]";
-        String message = String.format(format, url, lastThrown.getMessage());
-        throw new RuntimeException(message, lastThrown);
-    }
-
     public static void threadSleep(int timeout) {
         try {
             TimeUnit.SECONDS.sleep(timeout);
