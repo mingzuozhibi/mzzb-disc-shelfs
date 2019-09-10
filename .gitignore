@@ -1,5 +1,6 @@
 ### Project ###
 config/application.properties
+record/
 
 ### Spring Boot ###
 HELP.md
