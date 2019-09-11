@@ -1,26 +1,19 @@
 package mingzuozhibi.discshelfs;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import mingzuozhibi.common.BaseModel;
 
-import javax.persistence.*;
+import javax.persistence.Column;
+import javax.persistence.Entity;
 import java.time.Instant;
 
 @Entity
 @Setter
 @Getter
 @NoArgsConstructor
-public class DiscShelf {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Version
-    @JsonIgnore
-    private Long version;
+public class DiscShelf extends BaseModel {
 
     @Column(length = 20, nullable = false, unique = true)
     private String asin;

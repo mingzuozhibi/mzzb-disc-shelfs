@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static mingzuozhibi.discshelfs.ChromeHelper.*;
+import static mingzuozhibi.common.ChromeHelper.*;
 
 @Slf4j
 @Service
