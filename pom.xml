@@ -12,7 +12,7 @@
 
     <groupId>mingzuozhibi</groupId>
     <artifactId>mzzb-disc-shelfs</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
 
     <name>mzzb-disc-shelfs</name>
     <description>DiscShelfs service for mingzuozhibi.com</description>
