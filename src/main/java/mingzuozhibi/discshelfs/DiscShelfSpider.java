@@ -45,11 +45,41 @@ public class DiscShelfSpider {
         jmsTemplate.convertAndSend("mzzb-disc-shelfs-errors", message);
     }
 
+    private static final String BASE_URL1 = "https://www.amazon.co.jp/s?i=dvd&" +
+            "rh=n%3A561958%2Cn%3A562002%2Cn%3A562020&" +
+            "s=date-desc-rank&language=ja_JP&ref=sr_pg_1&page=";
+
+    private static final String BASE_URL2 = "https://www.amazon.co.jp/s?i=dvd&" +
+            "rh=n%3A561958%2Cn%3A%21562002%2Cn%3A562026%2Cn%3A2201429051&" +
+            "s=date-desc-rank&language=ja_JP&ref=sr_pg_1&page=";
+
+
     public void fetchFromAmazon() {
         infoSpiderStatus("扫描新碟片：准备开始");
+        isBreak.set(false);
+        noError.set(0);
+
+        List<String> taskUrls = new ArrayList<>(70);
+        for (int page = 1; page <= 60; page++) {
+            taskUrls.add(BASE_URL1 + page);
+        }
+        for (int page = 1; page <= 10; page++) {
+            taskUrls.add(BASE_URL2 + page);
+        }
+
+        int taskCount = taskUrls.size();
+        infoSpiderStatus(String.format("扫描新碟片：共%d个任务", taskCount));
+
         doInSessionFactory(factory -> {
-            fetchPage(factory, "深夜动画", 60, "https://www.amazon.co.jp/s?i=dvd&rh=n%3A561958%2Cn%3A562002%2Cn%3A562020&s=date-desc-rank&language=ja_JP&ref=sr_pg_1");
-            fetchPage(factory, "日间动画", 10, "https://www.amazon.co.jp/s?i=dvd&rh=n%3A561958%2Cn%3A%21562002%2Cn%3A562026%2Cn%3A2201429051&s=date-desc-rank&language=ja_JP&ref=sr_pg_1");
+            for (int i = 0; i < taskCount; i++) {
+                String taskUrl = taskUrls.get(i);
+
+                infoSpiderStatus(String.format("正在抓取页面(%d/%d)：%s", i + 1, taskCount, taskUrl));
+
+                fetchPageFromAmazon(factory, taskUrl);
+
+                if (checkBreakOrSleep()) return;
+            }
         });
         if (isBreak.get()) {
             infoSpiderStatus("扫描新碟片：错误终止");
@@ -58,37 +88,36 @@ public class DiscShelfSpider {
         }
     }
 
-    private void fetchPage(SessionFactory factory, String taskName, int maxPage, String baseUrl) {
-        infoSpiderStatus(String.format("开始扫描%s：共%d个", taskName, maxPage));
-        for (int page = 1; page <= maxPage && !isBreak.get(); page++) {
-            infoSpiderStatus(String.format("正在扫描%s：抓取中(%d/%d)", taskName, page, maxPage));
-            String pageUrl = baseUrl + "&page=" + page;
-
-            Document document = null;
-            try {
-                document = waitRequest(factory, pageUrl);
-
-                Elements newResult = document.select(".s-result-list.sg-row > div[data-asin]");
-                Elements oldResult = document.select("#s-results-list-atf > li[data-result-rank]");
-
-                if (newResult.size() > 0) {
-                    handleNewTypeData(newResult);
-                } else if (oldResult.size() > 0) {
-                    handleOldTypeData(oldResult);
-                } else {
-                    handleErrorData(document);
-                }
-            } catch (RuntimeException e) {
-                handleException(document, e);
-            }
-
-            if (noError.get() > 10) {
-                isBreak.set(true);
-                warnSpiderStatus("扫描新碟片：连续十次数据异常");
-                return;
-            }
-
+    private boolean checkBreakOrSleep() {
+        if (isBreak.get()) {
+            return true;
+        }
+        if (noError.get() > 10) {
+            warnSpiderStatus("扫描新碟片：连续十次数据异常");
+            return true;
+        } else {
             threadSleep(30);
+            return false;
+        }
+    }
+
+    public void fetchPageFromAmazon(SessionFactory factory, String pageUrl) {
+        Document document = null;
+        try {
+            document = waitRequest(factory, pageUrl);
+
+            Elements newResult = document.select(".s-result-list.sg-row > div[data-asin]");
+            Elements oldResult = document.select("#s-results-list-atf > li[data-result-rank]");
+
+            if (newResult.size() > 0) {
+                handleNewTypeData(newResult);
+            } else if (oldResult.size() > 0) {
+                handleOldTypeData(oldResult);
+            } else {
+                handleErrorData(document);
+            }
+        } catch (RuntimeException e) {
+            handleException(document, e);
         }
     }
 
