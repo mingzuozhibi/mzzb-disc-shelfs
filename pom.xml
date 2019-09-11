@@ -45,6 +45,11 @@
             <artifactId>gson</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>io.webfolder</groupId>
             <artifactId>cdp4j</artifactId>
             <version>3.0.12</version>

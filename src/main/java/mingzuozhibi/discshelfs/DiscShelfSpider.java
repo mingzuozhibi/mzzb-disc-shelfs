@@ -64,17 +64,28 @@ public class DiscShelfSpider {
             infoSpiderStatus(String.format("正在扫描%s：抓取中(%d/%d)", taskName, page, maxPage));
             String pageUrl = baseUrl + "&page=" + page;
 
-            Document document = waitRequest(factory, pageUrl);
+            Document document = null;
+            try {
+                document = waitRequest(factory, pageUrl);
 
-            Elements newResult = document.select(".s-result-list.sg-row > div[data-asin]");
-            Elements oldResult = document.select("#s-results-list-atf > li[data-result-rank]");
+                Elements newResult = document.select(".s-result-list.sg-row > div[data-asin]");
+                Elements oldResult = document.select("#s-results-list-atf > li[data-result-rank]");
 
-            if (newResult.size() > 0) {
-                handleNewTypeData(newResult);
-            } else if (oldResult.size() > 0) {
-                handleOldTypeData(oldResult);
-            } else {
-                handleErrorData(document);
+                if (newResult.size() > 0) {
+                    handleNewTypeData(newResult);
+                } else if (oldResult.size() > 0) {
+                    handleOldTypeData(oldResult);
+                } else {
+                    handleErrorData(document);
+                }
+            } catch (RuntimeException e) {
+                handleException(document, e);
+            }
+
+            if (noError.get() > 10) {
+                isBreak.set(true);
+                warnSpiderStatus("扫描新碟片：连续十次数据异常");
+                return;
             }
 
             threadSleep(30);
@@ -113,15 +124,26 @@ public class DiscShelfSpider {
 
     private void handleErrorData(Document document) {
         String outerHtml = document.outerHtml();
+        String path = writeToTempFile(outerHtml);
         if (outerHtml.contains("api-services-support@amazon.com")) {
-            String path = writeToTempFile(document.outerHtml());
             warnSpiderStatus(String.format("扫描新碟片：已发现反爬虫系统[file=%s]", path));
             isBreak.set(true);
-        } else if (noError.incrementAndGet() > 10) {
-            String path = writeToTempFile(document.outerHtml());
-            warnSpiderStatus(String.format("扫描新碟片：连续十次数据异常[file=%s]", path));
-            isBreak.set(true);
+        } else {
+            warnSpiderStatus(String.format("扫描新碟片：未找到数据的页面[file=%s]", path));
+            noError.incrementAndGet();
         }
+    }
+
+    private void handleException(Document document, RuntimeException e) {
+        if (document != null) {
+            String outerHtml = document.outerHtml();
+            String path = writeToTempFile(outerHtml);
+            warnSpiderStatus(String.format("扫描新碟片：发生了异常的页面[file=%s]", path));
+        } else {
+            warnSpiderStatus(String.format("扫描新碟片：未能成功抓取页面[error=%s]", e.getMessage()));
+        }
+        log.warn("扫描新碟片：导致的异常信息为：", e);
+        noError.incrementAndGet();
     }
 
     private String writeToTempFile(String content) {

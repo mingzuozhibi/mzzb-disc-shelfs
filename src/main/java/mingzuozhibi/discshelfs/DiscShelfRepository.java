@@ -1,5 +1,6 @@
 package mingzuozhibi.discshelfs;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,7 +12,7 @@ public interface DiscShelfRepository extends JpaRepository<DiscShelf, Long> {
 
     @Transactional
     default void saveOrUpdate(String asin, String title) {
-        if (asin != null && asin.length() > 0) {
+        if (StringUtils.isNotEmpty(asin)) {
             Optional<DiscShelf> optionalDiscShelf = findByAsin(asin);
             if (!optionalDiscShelf.isPresent()) {
                 save(new DiscShelf(asin, title));
