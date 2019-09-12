@@ -18,13 +18,12 @@ import java.util.List;
 public class DiscShelfController extends BaseController {
 
     @Autowired
-    private Gson gson;
-
-    @Autowired
     private DiscShelfSpider discShelfSpider;
 
     @Autowired
     private DiscShelfRepository discShelfRepository;
+
+    private Gson gson = GsonUtils.getGson();
 
     @Scheduled(cron = "0 0 5/6 * * ?")
     @GetMapping("/discShelfs/fetch")
