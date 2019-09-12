@@ -11,9 +11,6 @@ import java.util.Optional;
 @Component
 public class AppStartupRunner implements CommandLineRunner {
 
-    @Value("${spring.application.name}")
-    private String moduleName;
-
     @Value("${server.port}")
     private int port;
 
@@ -23,9 +20,9 @@ public class AppStartupRunner implements CommandLineRunner {
     public void run(String... args) throws Exception {
         Optional<String> hostAddress = InetAddressHelper.getHostAddress();
         if (hostAddress.isPresent()) {
-            jmsHelper.sendAddr(moduleName, hostAddress.get() + ":" + port);
+            jmsHelper.sendAddr(hostAddress.get() + ":" + port);
         } else {
-            jmsHelper.sendWarn(moduleName, "Can't get network address");
+            jmsHelper.sendWarn("Can't get network address");
         }
     }
 
