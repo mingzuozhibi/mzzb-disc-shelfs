@@ -1,10 +1,13 @@
 package mingzuozhibi.discshelfs;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import mingzuozhibi.common.BaseController;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Order;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -41,6 +44,15 @@ public class DiscShelfController extends BaseController {
         Page<DiscShelf> results = discShelfRepository.findAll(pageRequest);
         List<DiscShelf> content = results.getContent();
         return objectResult(gson.toJsonTree(content), buildPage(results));
+    }
+
+    public JsonElement buildPage(Page<?> page) {
+        JsonObject object = new JsonObject();
+        Pageable pageable = page.getPageable();
+        object.addProperty("pageSize", pageable.getPageSize());
+        object.addProperty("currentPage", pageable.getPageNumber() + 1);
+        object.addProperty("totalElements", page.getTotalElements());
+        return object;
     }
 
 }
