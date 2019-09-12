@@ -6,7 +6,6 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedWriter;
@@ -15,7 +14,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -29,21 +27,9 @@ public class DiscShelfSpider {
     private DiscShelfRepository discShelfRepository;
 
     @Autowired
-    private JmsTemplate jmsTemplate;
+    private JmsHelper jmsHelper;
 
-    private AtomicBoolean isBreak = new AtomicBoolean(false);
-    private AtomicInteger noError = new AtomicInteger(0);
-
-    private void infoSpiderStatus(String message) {
-        log.info(message);
-        jmsTemplate.convertAndSend("mzzb-disc-shelfs-status", message);
-    }
-
-    private void warnSpiderStatus(String message) {
-        log.warn(message);
-        jmsTemplate.convertAndSend("mzzb-disc-shelfs-status", message);
-        jmsTemplate.convertAndSend("mzzb-disc-shelfs-errors", message);
-    }
+    private AtomicInteger errorCount = new AtomicInteger(0);
 
     private static final String BASE_URL1 = "https://www.amazon.co.jp/s?i=dvd&" +
             "rh=n%3A561958%2Cn%3A562002%2Cn%3A562020&" +
@@ -53,11 +39,9 @@ public class DiscShelfSpider {
             "rh=n%3A561958%2Cn%3A%21562002%2Cn%3A562026%2Cn%3A2201429051&" +
             "s=date-desc-rank&language=ja_JP&ref=sr_pg_1&page=";
 
-
     public void fetchFromAmazon() {
-        infoSpiderStatus("扫描新碟片：准备开始");
-        isBreak.set(false);
-        noError.set(0);
+        jmsHelper.sendInfo("扫描新碟片：准备开始");
+        errorCount.set(0);
 
         List<String> taskUrls = new ArrayList<>(70);
         for (int page = 1; page <= 60; page++) {
@@ -68,36 +52,28 @@ public class DiscShelfSpider {
         }
 
         int taskCount = taskUrls.size();
-        infoSpiderStatus(String.format("扫描新碟片：共%d个任务", taskCount));
+        jmsHelper.sendInfo(String.format("扫描新碟片：共%d个任务", taskCount));
 
         doInSessionFactory(factory -> {
             for (int i = 0; i < taskCount; i++) {
                 String taskUrl = taskUrls.get(i);
 
-                infoSpiderStatus(String.format("正在抓取页面(%d/%d)：%s", i + 1, taskCount, taskUrl));
+                jmsHelper.sendInfo(String.format("正在抓取页面(%d/%d)：%s", i + 1, taskCount, taskUrl));
 
                 fetchPageFromAmazon(factory, taskUrl);
 
-                if (checkBreakOrSleep()) return;
+                if (errorCount.get() >= 5) {
+                    jmsHelper.sendInfo("扫描新碟片：连续5次数据异常");
+                    return;
+                }
+
+                threadSleep(30);
             }
         });
-        if (isBreak.get()) {
-            infoSpiderStatus("扫描新碟片：错误终止");
+        if (errorCount.get() >= 5) {
+            jmsHelper.sendInfo("扫描新碟片：错误终止");
         } else {
-            infoSpiderStatus("扫描新碟片：正常完成");
-        }
-    }
-
-    private boolean checkBreakOrSleep() {
-        if (isBreak.get()) {
-            return true;
-        }
-        if (noError.get() > 10) {
-            warnSpiderStatus("扫描新碟片：连续十次数据异常");
-            return true;
-        } else {
-            threadSleep(30);
-            return false;
+            jmsHelper.sendInfo("扫描新碟片：正常完成");
         }
     }
 
@@ -123,7 +99,7 @@ public class DiscShelfSpider {
 
     private void handleNewTypeData(Elements newResult) {
         List<Element> results = new ArrayList<>(newResult);
-        infoSpiderStatus(String.format("解析到新版数据(发现%d条数据)", results.size()));
+        jmsHelper.sendInfo(String.format("解析到新版数据(发现%d条数据)", results.size()));
 
         results.forEach(element -> {
             String asin = element.attr("data-asin");
@@ -132,14 +108,14 @@ public class DiscShelfSpider {
                     .text();
             discShelfRepository.saveOrUpdate(asin, title);
         });
-        noError.set(0);
+        errorCount.set(0);
     }
 
     private void handleOldTypeData(Elements oldResult) {
         List<Element> results = oldResult.stream()
                 .filter(element -> element.select(".s-sponsored-info-icon").size() == 0)
                 .collect(Collectors.toList());
-        infoSpiderStatus(String.format("解析到旧版数据(发现%d条数据)", results.size()));
+        jmsHelper.sendInfo(String.format("解析到旧版数据(发现%d条数据)", results.size()));
 
         results.forEach(element -> {
             String asin = element.attr("data-asin");
@@ -148,36 +124,35 @@ public class DiscShelfSpider {
                     .collect(Collectors.joining(" "));
             discShelfRepository.saveOrUpdate(asin, title);
         });
-        noError.set(0);
+        errorCount.set(0);
     }
 
     private void handleErrorData(Document document) {
         String outerHtml = document.outerHtml();
         String path = writeToTempFile(outerHtml);
         if (outerHtml.contains("api-services-support@amazon.com")) {
-            warnSpiderStatus(String.format("扫描新碟片：已发现反爬虫系统[file=%s]", path));
-            isBreak.set(true);
+            jmsHelper.sendWarn(String.format("扫描新碟片：已发现反爬虫系统[file=%s]", path));
         } else {
-            warnSpiderStatus(String.format("扫描新碟片：未找到数据的页面[file=%s]", path));
-            noError.incrementAndGet();
+            jmsHelper.sendWarn(String.format("扫描新碟片：未找到数据的页面[file=%s]", path));
         }
+        errorCount.incrementAndGet();
     }
 
     private void handleException(Document document, RuntimeException e) {
         if (document != null) {
             String outerHtml = document.outerHtml();
             String path = writeToTempFile(outerHtml);
-            warnSpiderStatus(String.format("扫描新碟片：发生了异常的页面[file=%s]", path));
+            jmsHelper.sendWarn(String.format("扫描新碟片：发生了异常的页面[file=%s]", path));
         } else {
-            warnSpiderStatus(String.format("扫描新碟片：未能成功抓取页面[error=%s]", e.getMessage()));
+            jmsHelper.sendWarn(String.format("扫描新碟片：未能成功抓取页面[error=%s]", e.getMessage()));
         }
         log.warn("扫描新碟片：导致的异常信息为：", e);
-        noError.incrementAndGet();
+        errorCount.incrementAndGet();
     }
 
     private String writeToTempFile(String content) {
         try {
-            File file = File.createTempFile("DiscShelfSpider", "html");
+            File file = File.createTempFile("DiscShelfSpider", ".html");
             try (BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(file))) {
                 bufferedWriter.write(content);
                 bufferedWriter.flush();

@@ -18,7 +18,7 @@ import java.util.List;
 public class DiscShelfController extends BaseController {
 
     @Autowired
-    private Gson gson;
+    private JmsHelper jmsHelper;
 
     @Autowired
     private DiscShelfSpider discShelfSpider;
@@ -26,12 +26,12 @@ public class DiscShelfController extends BaseController {
     @Autowired
     private DiscShelfRepository discShelfRepository;
 
+    private Gson gson = GsonUtils.getGson();
+
     @Scheduled(cron = "0 0 5/6 * * ?")
     @GetMapping("/discShelfs/fetch")
     public void startFetch() {
-        Thread thread = new Thread(discShelfSpider::fetchFromAmazon);
-        thread.setDaemon(true);
-        thread.start();
+        runWithDaemon(discShelfSpider::fetchFromAmazon);
     }
 
     @GetMapping("/discShelfs")
@@ -41,6 +41,16 @@ public class DiscShelfController extends BaseController {
         Page<DiscShelf> results = discShelfRepository.findAll(pageRequest);
         List<DiscShelf> content = results.getContent();
         return objectResult(gson.toJsonTree(content), buildPage(results));
+    }
+
+    private void runWithDaemon(Runnable runnable) {
+        Thread thread = new Thread(runnable);
+        thread.setDaemon(true);
+        thread.setUncaughtExceptionHandler((t, e) -> {
+            jmsHelper.sendWarn(String.format("Thread %s: Exit: %s %s"
+                    , t.getName(), e.getClass().getName(), e.getMessage()));
+        });
+        thread.start();
     }
 
 }
