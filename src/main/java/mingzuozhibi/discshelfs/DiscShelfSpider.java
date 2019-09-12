@@ -177,7 +177,7 @@ public class DiscShelfSpider {
 
     private String writeToTempFile(String content) {
         try {
-            File file = File.createTempFile("DiscShelfSpider", "html");
+            File file = File.createTempFile("DiscShelfSpider", ".html");
             try (BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(file))) {
                 bufferedWriter.write(content);
                 bufferedWriter.flush();
