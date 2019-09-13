@@ -39,7 +39,7 @@ public class DiscShelfSpider {
     private DiscShelfRepository discShelfRepository;
 
     public void fetchFromAmazon() {
-        jmsMessage.info("扫描新碟片：准备开始");
+        jmsMessage.notify("扫描新碟片：准备开始");
 
         List<String> taskUrls = buildTaskUrls();
         int taskCount = taskUrls.size();
@@ -52,7 +52,7 @@ public class DiscShelfSpider {
                 int page = context.fetchCount.incrementAndGet();
 
                 // 抓取中
-                jmsMessage.info(String.format("正在抓取页面(%d/%d)：%s", page, taskCount, taskUrl));
+                jmsMessage.info(String.format("正在抓取页面(%d/%d)", page, taskCount));
                 Result<String> bodyResult = waitResult(factory, taskUrl);
                 if (bodyResult.notDone()) {
                     jmsMessage.warning("抓取中遇到错误：" + bodyResult.formatError());
@@ -76,14 +76,17 @@ public class DiscShelfSpider {
                     handleException(outerHtml, e, context);
                 }
 
-                threadSleep(15);
+                threadSleep(10);
             }
         });
 
+        jmsMessage.info(String.format("任务总结：抓取了%d个页面，发现了%d个新碟片",
+            context.doneCount.get(), context.discCount.get()));
+
         if (context.errorCount.get() >= 5) {
-            jmsMessage.info("扫描新碟片：异常终止");
+            jmsMessage.danger("扫描新碟片：异常终止");
         } else {
-            jmsMessage.info("扫描新碟片：正常完成");
+            jmsMessage.notify("扫描新碟片：正常完成");
         }
     }
 
