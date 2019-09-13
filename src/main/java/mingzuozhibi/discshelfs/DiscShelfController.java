@@ -50,7 +50,7 @@ public class DiscShelfController extends BaseController {
         thread.setDaemon(true);
         thread.setUncaughtExceptionHandler((t, e) -> {
             jmsMessage.warning(String.format("Thread %s: Exit: %s %s"
-                    , t.getName(), e.getClass().getName(), e.getMessage()));
+                , t.getName(), e.getClass().getName(), e.getMessage()));
         });
         thread.start();
     }
