@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "mingzuozhibi")
 public class MzzbDiscShelfsApplication {
     public static void main(String[] args) {
         SpringApplication.run(MzzbDiscShelfsApplication.class, args);

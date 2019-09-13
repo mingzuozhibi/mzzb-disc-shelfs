@@ -2,6 +2,8 @@ package mingzuozhibi.discshelfs;
 
 import com.google.gson.Gson;
 import mingzuozhibi.common.BaseController;
+import mingzuozhibi.common.jms.JmsMessage;
+import mingzuozhibi.discshelfs.util.GsonUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -18,7 +20,7 @@ import java.util.List;
 public class DiscShelfController extends BaseController {
 
     @Autowired
-    private JmsHelper jmsHelper;
+    private JmsMessage jmsMessage;
 
     @Autowired
     private DiscShelfSpider discShelfSpider;
@@ -29,7 +31,7 @@ public class DiscShelfController extends BaseController {
     private Gson gson = GsonUtils.getGson();
 
     @Scheduled(cron = "0 0 5/6 * * ?")
-    @GetMapping("/discShelfs/fetch")
+    @GetMapping("/startFetch")
     public void startFetch() {
         runWithDaemon(discShelfSpider::fetchFromAmazon);
     }
@@ -47,8 +49,8 @@ public class DiscShelfController extends BaseController {
         Thread thread = new Thread(runnable);
         thread.setDaemon(true);
         thread.setUncaughtExceptionHandler((t, e) -> {
-            jmsHelper.sendWarn(String.format("Thread %s: Exit: %s %s"
-                    , t.getName(), e.getClass().getName(), e.getMessage()));
+            jmsMessage.warning(String.format("Thread %s: Exit: %s %s"
+                , t.getName(), e.getClass().getName(), e.getMessage()));
         });
         thread.start();
     }
