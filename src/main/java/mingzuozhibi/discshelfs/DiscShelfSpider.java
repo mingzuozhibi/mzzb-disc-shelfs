@@ -1,8 +1,9 @@
 package mingzuozhibi.discshelfs;
 
-import io.webfolder.cdp.session.SessionFactory;
 import lombok.extern.slf4j.Slf4j;
 import mingzuozhibi.common.jms.JmsMessage;
+import mingzuozhibi.common.model.Result;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -16,124 +17,122 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
-import static mingzuozhibi.common.ChromeHelper.*;
+import static mingzuozhibi.common.model.Result.formatErrors;
+import static mingzuozhibi.common.util.ChromeUtils.*;
+import static mingzuozhibi.discshelfs.DiscShelfSpiderSupport.buildTaskUrls;
 
 @Slf4j
 @Service
 public class DiscShelfSpider {
 
-    @Autowired
-    private DiscShelfService discShelfService;
+    private static class SpiderContext {
+        private AtomicInteger errorCount = new AtomicInteger(0);
+        private AtomicInteger fetchCount = new AtomicInteger(0);
+        private AtomicInteger doneCount = new AtomicInteger(0);
+        private AtomicInteger discCount = new AtomicInteger(0);
+    }
+
     @Autowired
     private JmsMessage jmsMessage;
-
-    private AtomicInteger errorCount = new AtomicInteger(0);
+    @Autowired
+    private DiscShelfRepository discShelfRepository;
 
     public void fetchFromAmazon() {
         jmsMessage.info("扫描新碟片：准备开始");
-        errorCount.set(0);
 
-        List<String> taskUrls = DiscShelfSpiderSupport.buildTaskUrls();
-
+        List<String> taskUrls = buildTaskUrls();
         int taskCount = taskUrls.size();
         jmsMessage.info(String.format("扫描新碟片：共%d个任务", taskCount));
 
+        SpiderContext context = new SpiderContext();
         doInSessionFactory(factory -> {
-            for (int i = 0; i < taskCount; i++) {
-                String taskUrl = taskUrls.get(i);
+            for (String taskUrl : taskUrls) {
+                if (checkBreak(context)) return;
+                int page = context.fetchCount.incrementAndGet();
 
-                jmsMessage.info(String.format("正在抓取页面(%d/%d)：%s", i + 1, taskCount, taskUrl));
-
-                fetchPageFromAmazon(factory, taskUrl);
-
-                if (errorCount.get() >= 5) {
-                    jmsMessage.info("扫描新碟片：连续5次数据异常");
-                    return;
+                // 抓取中
+                jmsMessage.info(String.format("正在抓取页面(%d/%d)：%s", page, taskCount, taskUrl));
+                Result<String> bodyResult = waitResult(factory, taskUrl);
+                if (bodyResult.notDone()) {
+                    jmsMessage.warning("抓取中遇到错误：" + bodyResult.formatError());
+                    context.errorCount.incrementAndGet();
+                    continue;
                 }
 
-                threadSleep(30);
+                // 解析中
+                String outerHtml = bodyResult.getContent();
+                try {
+                    Document document = Jsoup.parseBodyFragment(outerHtml);
+                    Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
+
+                    if (elements.size() > 0) {
+                        handleElements(elements, context);
+                    } else {
+                        handleNotFound(outerHtml, context);
+                    }
+
+                } catch (RuntimeException e) {
+                    handleException(outerHtml, e, context);
+                }
+
+                threadSleep(15);
             }
         });
-        if (errorCount.get() >= 5) {
-            jmsMessage.info("扫描新碟片：错误终止");
+
+        if (context.errorCount.get() >= 5) {
+            jmsMessage.info("扫描新碟片：异常终止");
         } else {
             jmsMessage.info("扫描新碟片：正常完成");
         }
     }
 
-    public void fetchPageFromAmazon(SessionFactory factory, String pageUrl) {
-        Document document = null;
-        try {
-            document = waitRequest(factory, pageUrl);
-
-            Elements newResult = document.select(".s-result-list.sg-row > div[data-asin]");
-            Elements oldResult = document.select("#s-results-list-atf > li[data-result-rank]");
-
-            if (newResult.size() > 0) {
-                handleNewTypeData(newResult);
-            } else if (oldResult.size() > 0) {
-                handleOldTypeData(oldResult);
-            } else {
-                handleErrorData(document);
-            }
-        } catch (RuntimeException e) {
-            handleException(document, e);
+    private boolean checkBreak(SpiderContext context) {
+        if (context.errorCount.get() >= 5) {
+            jmsMessage.info("扫描新碟片：连续5次数据异常");
+            return true;
         }
+        return false;
     }
 
-    private void handleNewTypeData(Elements newResult) {
-        List<Element> results = new ArrayList<>(newResult);
-        jmsMessage.info(String.format("解析到新版数据(发现%d条数据)", results.size()));
+    private void handleElements(Elements elements, SpiderContext context) {
+        List<Element> results = new ArrayList<>(elements);
+        jmsMessage.info(String.format("解析到%d条数据", results.size()));
 
         results.forEach(element -> {
             String asin = element.attr("data-asin");
             String title = element.select(".a-size-medium.a-color-base.a-text-normal")
-                    .first()
-                    .text();
-            discShelfService.saveOrUpdate(asin, title);
+                .first()
+                .text();
+            if (discShelfRepository.saveOrUpdate(asin, title)) {
+                context.discCount.incrementAndGet();
+                jmsMessage.success(String.format("发现新碟片[Asin=%s][Title=%s]", asin, title));
+            }
         });
-        errorCount.set(0);
+
+        context.errorCount.set(0);
+        context.doneCount.incrementAndGet();
     }
 
-    private void handleOldTypeData(Elements oldResult) {
-        List<Element> results = oldResult.stream()
-                .filter(element -> element.select(".s-sponsored-info-icon").size() == 0)
-                .collect(Collectors.toList());
-        jmsMessage.info(String.format("解析到旧版数据(发现%d条数据)", results.size()));
-
-        results.forEach(element -> {
-            String asin = element.attr("data-asin");
-            String title = element.select("a.a-link-normal[title]").stream()
-                    .map(e -> e.attr("title"))
-                    .collect(Collectors.joining(" "));
-            discShelfService.saveOrUpdate(asin, title);
-        });
-        errorCount.set(0);
-    }
-
-    private void handleErrorData(Document document) {
-        String outerHtml = document.outerHtml();
-        String path = writeToTempFile(outerHtml);
+    private void handleNotFound(String outerHtml, SpiderContext context) {
         if (outerHtml.contains("api-services-support@amazon.com")) {
-            jmsMessage.warning(String.format("扫描新碟片：已发现反爬虫系统[file=%s]", path));
+            jmsMessage.warning("扫描新碟片：已发现反爬虫系统");
         } else {
-            jmsMessage.warning(String.format("扫描新碟片：未找到数据的页面[file=%s]", path));
+            jmsMessage.warning("扫描新碟片：未找到符合的数据");
+            recordErrorContent("未找到符合的数据", outerHtml);
         }
-        errorCount.incrementAndGet();
+        context.errorCount.incrementAndGet();
     }
 
-    private void handleException(Document document, RuntimeException e) {
-        if (document != null) {
-            String outerHtml = document.outerHtml();
-            String path = writeToTempFile(outerHtml);
-            jmsMessage.warning(String.format("扫描新碟片：发生了异常的页面[file=%s]", path));
-        } else {
-            jmsMessage.warning(String.format("扫描新碟片：未能成功抓取页面[error=%s]", e.getMessage()));
-        }
-        log.warn("扫描新碟片：导致的异常信息为：", e);
-        errorCount.incrementAndGet();
+    private void handleException(String outerHtml, RuntimeException e, SpiderContext context) {
+        jmsMessage.warning("解析中发生异常：" + formatErrors(e));
+        recordErrorContent("解析中发生异常", outerHtml);
+        context.errorCount.incrementAndGet();
+    }
+
+    private void recordErrorContent(String type, String outerHtml) {
+        String path = writeToTempFile(outerHtml);
+        log.warn("解析中发生异常：type={} file={}", type, path);
     }
 
     private String writeToTempFile(String content) {
