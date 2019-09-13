@@ -1,4 +1,4 @@
-package mingzuozhibi.discshelfs;
+package mingzuozhibi.discshelfs.util;
 
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
