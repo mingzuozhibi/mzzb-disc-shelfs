@@ -3,23 +3,18 @@ package mingzuozhibi.discshelfs;
 import lombok.extern.slf4j.Slf4j;
 import mingzuozhibi.common.jms.JmsMessage;
 import mingzuozhibi.common.model.Result;
+import mingzuozhibi.common.spider.SpiderRecorder;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static mingzuozhibi.common.model.Result.formatErrors;
-import static mingzuozhibi.common.util.ChromeUtils.*;
+import static mingzuozhibi.common.spider.SpiderCdp4j.*;
+import static mingzuozhibi.common.spider.SpiderRecorder.writeContent;
 import static mingzuozhibi.discshelfs.DiscShelfSpiderSupport.buildTaskUrls;
 
 @Slf4j
@@ -39,117 +34,60 @@ public class DiscShelfSpider {
     private DiscShelfRepository discShelfRepository;
 
     public void fetchFromAmazon() {
-        jmsMessage.notify("扫描新碟片：准备开始");
-
         List<String> taskUrls = buildTaskUrls();
-        int taskCount = taskUrls.size();
-        jmsMessage.info(String.format("扫描新碟片：共%d个任务", taskCount));
+        SpiderRecorder recorder = new SpiderRecorder("上架信息", taskUrls.size(), jmsMessage);
+        AtomicInteger rowCount = new AtomicInteger(0);
+        recorder.jmsStartUpdate();
 
-        SpiderContext context = new SpiderContext();
         doInSessionFactory(factory -> {
             for (String taskUrl : taskUrls) {
-                if (checkBreak(context)) return;
-                int page = context.fetchCount.incrementAndGet();
+                if (recorder.checkBreakCount(5)) break;
+                recorder.jmsStartUpdateRow("*");
 
-                // 抓取中
-                jmsMessage.info(String.format("正在抓取页面(%d/%d)", page, taskCount));
+                String origin = "page=" + recorder.getFetchCount();
                 Result<String> bodyResult = waitResult(factory, taskUrl);
-                if (bodyResult.notDone()) {
-                    jmsMessage.warning("抓取中遇到错误：" + bodyResult.formatError());
-                    context.errorCount.incrementAndGet();
+                if (recorder.checkUnfinished(bodyResult, origin)) {
                     continue;
                 }
 
-                // 解析中
-                String outerHtml = bodyResult.getContent();
+                String content = bodyResult.getContent();
                 try {
-                    Document document = Jsoup.parseBodyFragment(outerHtml);
+                    Document document = Jsoup.parseBodyFragment(content);
                     Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
-
                     if (elements.size() > 0) {
-                        handleElements(elements, context);
+                        recorder.jmsSuccessRow("Found " + elements.size() + " data");
+                        parseDiscShelfs(elements, rowCount);
                     } else {
-                        handleNotFound(outerHtml, context);
+                        if (content.contains("api-services-support@amazon.com")) {
+                            recorder.jmsFailedRow("There seems to be an anti-robot system");
+                        } else {
+                            recorder.jmsFailedRow("Data does not match the format");
+                        }
                     }
 
                 } catch (RuntimeException e) {
-                    handleException(outerHtml, e, context);
+                    recorder.jmsErrorRow(e);
+                    writeContent(content, "page:" + recorder.getFetchCount());
                 }
 
-                threadSleep(10);
+                threadSleep(5);
             }
         });
 
-        jmsMessage.info(String.format("任务总结：抓取了%d个页面，发现了%d个新碟片",
-            context.doneCount.get(), context.discCount.get()));
-
-        if (context.errorCount.get() >= 5) {
-            jmsMessage.danger("扫描新碟片：异常终止");
-        } else {
-            jmsMessage.notify("扫描新碟片：正常完成");
-        }
+        jmsMessage.info("Found a total of %d new discs", rowCount.get());
+        recorder.jmsSummary();
+        recorder.jmsEndUpdate();
     }
 
-    private boolean checkBreak(SpiderContext context) {
-        if (context.errorCount.get() >= 5) {
-            jmsMessage.info("扫描新碟片：连续5次数据异常");
-            return true;
-        }
-        return false;
-    }
-
-    private void handleElements(Elements elements, SpiderContext context) {
-        List<Element> results = new ArrayList<>(elements);
-        jmsMessage.info(String.format("解析到%d条数据", results.size()));
-
-        results.forEach(element -> {
+    private void parseDiscShelfs(Elements elements, AtomicInteger rowCount) {
+        elements.forEach(element -> {
             String asin = element.attr("data-asin");
-            String title = element.select(".a-size-medium.a-color-base.a-text-normal")
-                .first()
-                .text();
+            String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
             if (discShelfRepository.saveOrUpdate(asin, title)) {
-                context.discCount.incrementAndGet();
-                jmsMessage.success(String.format("发现新碟片[Asin=%s][Title=%s]", asin, title));
+                jmsMessage.success(String.format("Find a new disc [asin=%s][title=%s]", asin, title));
+                rowCount.incrementAndGet();
             }
         });
-
-        context.errorCount.set(0);
-        context.doneCount.incrementAndGet();
-    }
-
-    private void handleNotFound(String outerHtml, SpiderContext context) {
-        if (outerHtml.contains("api-services-support@amazon.com")) {
-            jmsMessage.warning("扫描新碟片：已发现反爬虫系统");
-        } else {
-            jmsMessage.warning("扫描新碟片：未找到符合的数据");
-            recordErrorContent("未找到符合的数据", outerHtml);
-        }
-        context.errorCount.incrementAndGet();
-    }
-
-    private void handleException(String outerHtml, RuntimeException e, SpiderContext context) {
-        jmsMessage.warning("解析中发生异常：" + formatErrors(e));
-        recordErrorContent("解析中发生异常", outerHtml);
-        context.errorCount.incrementAndGet();
-    }
-
-    private void recordErrorContent(String type, String outerHtml) {
-        String path = writeToTempFile(outerHtml);
-        log.warn("解析中发生异常：type={} file={}", type, path);
-    }
-
-    private String writeToTempFile(String content) {
-        try {
-            File file = File.createTempFile("DiscShelfSpider", ".html");
-            try (BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(file))) {
-                bufferedWriter.write(content);
-                bufferedWriter.flush();
-                return file.getAbsolutePath();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return "null";
     }
 
 }
