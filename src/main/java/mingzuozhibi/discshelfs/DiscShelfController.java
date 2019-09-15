@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import static mingzuozhibi.common.util.ThreadUtils.runWithDaemon;
+
 @RestController
 public class DiscShelfController extends BaseController {
 
@@ -30,10 +32,12 @@ public class DiscShelfController extends BaseController {
 
     private Gson gson = GsonUtils.getGson();
 
-    @Scheduled(cron = "0 0 5/6 * * ?")
-    @GetMapping("/startFetch")
-    public void startFetch() {
-        runWithDaemon(discShelfSpider::fetchFromAmazon);
+    @Scheduled(cron = "0 12 3/4 * * ?")
+    @GetMapping("/startUpdate")
+    public void startUpdate() {
+        runWithDaemon(jmsMessage, "startUpdate", () -> {
+            discShelfSpider.fetchFromAmazon();
+        });
     }
 
     @GetMapping("/discShelfs")
@@ -43,16 +47,6 @@ public class DiscShelfController extends BaseController {
         Page<DiscShelf> results = discShelfRepository.findAll(pageRequest);
         List<DiscShelf> content = results.getContent();
         return objectResult(gson.toJsonTree(content), buildPage(results));
-    }
-
-    private void runWithDaemon(Runnable runnable) {
-        Thread thread = new Thread(runnable);
-        thread.setDaemon(true);
-        thread.setUncaughtExceptionHandler((t, e) -> {
-            jmsMessage.warning(String.format("Thread %s: Exit: %s %s"
-                , t.getName(), e.getClass().getName(), e.getMessage()));
-        });
-        thread.start();
     }
 
 }
