@@ -18,22 +18,25 @@ public class DiscShelf extends BaseModel {
     @Column(length = 20, nullable = false, unique = true)
     private String asin;
 
+    @Column(length = 20)
+    private String type;
+
     @Column(length = 500, nullable = false)
     private String title;
 
     @Column(nullable = false)
     private Instant createOn;
 
-    public DiscShelf(String asin, String title) {
+    public DiscShelf(String asin, String type, String title) {
         this.asin = asin;
+        this.type = type;
         this.title = title;
         this.createOn = Instant.now();
     }
 
-    public DiscShelf(String asin, String title, Instant createOn) {
-        this.asin = asin;
-        this.title = title;
-        this.createOn = createOn;
+    @Override
+    public String toString() {
+        return String.format("asin='%s', type='%s', title='%s'", asin, type, title);
     }
 
 }

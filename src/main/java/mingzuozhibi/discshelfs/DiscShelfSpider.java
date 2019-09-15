@@ -11,7 +11,11 @@ import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static mingzuozhibi.common.spider.SpiderCdp4j.*;
 import static mingzuozhibi.common.spider.SpiderRecorder.writeContent;
@@ -25,6 +29,7 @@ public class DiscShelfSpider {
     private JmsMessage jmsMessage;
     @Autowired
     private DiscShelfRepository discShelfRepository;
+    private Pattern hrefRegex = Pattern.compile("/dp/([A-Z0-9]+)/");
 
     public void fetchFromAmazon() {
         List<DiscShelfTask> tasks = buildTasks();
@@ -43,22 +48,27 @@ public class DiscShelfSpider {
 
                 String content = bodyResult.getContent();
                 try {
-                    Document document = Jsoup.parseBodyFragment(content);
-                    Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
-                    if (elements.size() > 0) {
-                        recorder.jmsSuccessRow(task.getOrigin(), String.format("找到%d条数据", elements.size()));
-                        parseDiscShelfs(elements, recorder);
+                    DiscShelfParser discShelfParser = new DiscShelfParser(content).parse();
+                    AtomicInteger discCount = discShelfParser.getDiscCount();
+                    List<DiscShelf> findList = discShelfParser.getFindList();
+
+                    if (discCount.get() > 0) {
+                        recorder.jmsSuccessRow(task.getOrigin(), String.format("找到%d条数据(%d)", discCount.get(), findList.size()));
+                        findList.forEach(discShelf -> {
+                            discShelfRepository.saveOrUpdate(discShelf);
+                            recorder.jmsFoundData(String.format("发现新碟片[%s]", discShelf));
+                        });
                     } else {
                         if (content.contains("api-services-support@amazon.com")) {
                             recorder.jmsFailedRow("发现日亚反爬虫系统");
                         } else {
-                            recorder.jmsFailedRow("页面数据未通过校验");
+                            recorder.jmsFailedRow("页面数据不符合格式");
+                            writeContent(content, task.getOrigin());
                         }
                     }
-
                 } catch (RuntimeException e) {
                     recorder.jmsErrorRow(e);
-                    writeContent(content, "page=" + recorder.getFetchCount());
+                    writeContent(content, task.getOrigin());
                 }
 
                 threadSleep(5);
@@ -70,14 +80,46 @@ public class DiscShelfSpider {
         recorder.jmsEndUpdate();
     }
 
-    private void parseDiscShelfs(Elements elements, SpiderRecorder recorder) {
-        elements.forEach(element -> {
-            String asin = element.attr("data-asin");
-            String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
-            if (discShelfRepository.saveOrUpdate(asin, title)) {
-                recorder.jmsFoundData(String.format("发现新碟片[asin=%s][title=%s]", asin, title));
-            }
-        });
+    private class DiscShelfParser {
+
+        private String content;
+        private AtomicInteger discCount;
+        private List<DiscShelf> findList;
+
+        public DiscShelfParser(String content) {
+            this.content = content;
+        }
+
+        public AtomicInteger getDiscCount() {
+            return discCount;
+        }
+
+        public List<DiscShelf> getFindList() {
+            return findList;
+        }
+
+        public DiscShelfParser parse() {
+            Document document = Jsoup.parseBodyFragment(content);
+            Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
+            discCount = new AtomicInteger(0);
+            findList = new LinkedList<>();
+            elements.forEach(element -> {
+                String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
+                element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
+                    discCount.incrementAndGet();
+                    String type = e.text().trim();
+                    String href = e.attr("href");
+                    Matcher matcher = hrefRegex.matcher(href);
+                    if (matcher.find()) {
+                        String asin = matcher.group(1);
+                        if (!discShelfRepository.existsByAsin(asin)) {
+                            findList.add(new DiscShelf(asin, type, title));
+                        }
+                    }
+                });
+            });
+            return this;
+        }
     }
 
 }
