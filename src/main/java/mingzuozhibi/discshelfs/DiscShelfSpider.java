@@ -65,7 +65,7 @@ public class DiscShelfSpider {
             }
         });
 
-        jmsMessage.success("本次发现新碟片%个", recorder.getDataCount());
+        jmsMessage.success("本次发现新碟片%d个", recorder.getDataCount());
         recorder.jmsSummary();
         recorder.jmsEndUpdate();
     }
