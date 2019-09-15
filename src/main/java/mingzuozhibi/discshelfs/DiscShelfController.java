@@ -30,7 +30,7 @@ public class DiscShelfController extends BaseController {
 
     private Gson gson = GsonUtils.getGson();
 
-    @Scheduled(cron = "0 0 5/6 * * ?")
+    @Scheduled(cron = "0 12 3/4 * * ?")
     @GetMapping("/startFetch")
     public void startFetch() {
         runWithDaemon(discShelfSpider::fetchFromAmazon);
