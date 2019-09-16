@@ -41,7 +41,7 @@ public class DiscShelfSpider {
                 recorder.jmsStartUpdateRow(task.getOrigin());
 
                 Result<String> bodyResult = waitResult(factory, task.getUrl());
-                if (recorder.checkUnfinished(bodyResult)) {
+                if (recorder.checkUnfinished(task.getOrigin(), bodyResult)) {
                     continue;
                 }
 
@@ -57,14 +57,14 @@ public class DiscShelfSpider {
                         });
                     } else {
                         if (content.contains("api-services-support@amazon.com")) {
-                            recorder.jmsFailedRow("发现日亚反爬虫系统");
+                            recorder.jmsFailedRow(task.getOrigin(), "发现日亚反爬虫系统");
                         } else {
-                            recorder.jmsFailedRow("页面数据不符合格式");
+                            recorder.jmsFailedRow(task.getOrigin(), "页面数据不符合格式");
                             writeContent(content, task.getOrigin());
                         }
                     }
                 } catch (RuntimeException e) {
-                    recorder.jmsErrorRow(e);
+                    recorder.jmsErrorRow(task.getOrigin(), e);
                     writeContent(content, task.getOrigin());
                 }
 
