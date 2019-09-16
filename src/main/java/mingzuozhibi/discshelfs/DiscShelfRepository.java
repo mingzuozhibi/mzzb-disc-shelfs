@@ -9,15 +9,17 @@ public interface DiscShelfRepository extends JpaRepository<DiscShelf, Long> {
 
     Optional<DiscShelf> findByAsin(String asin);
 
-    boolean existsByAsin(String asin);
-
     @Transactional
-    default void saveOrUpdate(DiscShelf discShelf) {
+    default boolean saveOrUpdate(DiscShelf discShelf) {
         Optional<DiscShelf> discShelfOptional = this.findByAsin(discShelf.getAsin());
         if (discShelfOptional.isPresent()) {
-            discShelfOptional.get().setTitle(discShelf.getTitle());
+            DiscShelf shelf = discShelfOptional.get();
+            shelf.setType(discShelf.getType());
+            shelf.setTitle(discShelf.getTitle());
+            return false;
         } else {
             this.save(discShelf);
+            return true;
         }
     }
 
