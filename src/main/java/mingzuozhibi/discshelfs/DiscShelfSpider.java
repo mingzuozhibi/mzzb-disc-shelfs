@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,15 +47,13 @@ public class DiscShelfSpider {
 
                 String content = bodyResult.getContent();
                 try {
-                    DiscShelfParser discShelfParser = new DiscShelfParser(content).parse();
-                    AtomicInteger discCount = discShelfParser.getDiscCount();
-                    List<DiscShelf> findList = discShelfParser.getFindList();
-
-                    if (discCount.get() > 0) {
-                        recorder.jmsSuccessRow(task.getOrigin(), String.format("找到%d条数据(%d)", discCount.get(), findList.size()));
-                        findList.forEach(discShelf -> {
-                            discShelfRepository.saveOrUpdate(discShelf);
-                            recorder.jmsFoundData(String.format("发现新碟片[%s]", discShelf));
+                    List<DiscShelf> discShelfs = parse(content);
+                    if (discShelfs.size() > 0) {
+                        recorder.jmsSuccessRow(task.getOrigin(), String.format("找到%d条数据", discShelfs.size()));
+                        discShelfs.forEach(discShelf -> {
+                            if (discShelfRepository.saveOrUpdate(discShelf)) {
+                                recorder.jmsFoundData(String.format("发现新碟片[%s]", discShelf));
+                            }
                         });
                     } else {
                         if (content.contains("api-services-support@amazon.com")) {
@@ -80,46 +77,24 @@ public class DiscShelfSpider {
         recorder.jmsEndUpdate();
     }
 
-    private class DiscShelfParser {
+    private List<DiscShelf> parse(String content) {
+        Document document = Jsoup.parseBodyFragment(content);
+        Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
 
-        private String content;
-        private AtomicInteger discCount;
-        private List<DiscShelf> findList;
-
-        public DiscShelfParser(String content) {
-            this.content = content;
-        }
-
-        public AtomicInteger getDiscCount() {
-            return discCount;
-        }
-
-        public List<DiscShelf> getFindList() {
-            return findList;
-        }
-
-        public DiscShelfParser parse() {
-            Document document = Jsoup.parseBodyFragment(content);
-            Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
-            discCount = new AtomicInteger(0);
-            findList = new LinkedList<>();
-            elements.forEach(element -> {
-                String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
-                element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
-                    discCount.incrementAndGet();
-                    String type = e.text().trim();
-                    String href = e.attr("href");
-                    Matcher matcher = hrefRegex.matcher(href);
-                    if (matcher.find()) {
-                        String asin = matcher.group(1);
-                        if (!discShelfRepository.existsByAsin(asin)) {
-                            findList.add(new DiscShelf(asin, type, title));
-                        }
-                    }
-                });
+        List<DiscShelf> discShelfs = new LinkedList<>();
+        elements.forEach(element -> {
+            String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
+            element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
+                String type = e.text().trim();
+                String href = e.attr("href");
+                Matcher matcher = hrefRegex.matcher(href);
+                if (matcher.find()) {
+                    String asin = matcher.group(1);
+                    discShelfs.add(new DiscShelf(asin, type, title));
+                }
             });
-            return this;
-        }
+        });
+        return discShelfs;
     }
 
 }
