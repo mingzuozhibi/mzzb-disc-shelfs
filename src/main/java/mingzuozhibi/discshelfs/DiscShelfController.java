@@ -1,9 +1,7 @@
 package mingzuozhibi.discshelfs;
 
-import com.google.gson.Gson;
 import mingzuozhibi.common.BaseController;
 import mingzuozhibi.common.jms.JmsMessage;
-import mingzuozhibi.discshelfs.util.GsonUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,8 +28,6 @@ public class DiscShelfController extends BaseController {
     @Autowired
     private DiscShelfRepository discShelfRepository;
 
-    private Gson gson = GsonUtils.getGson();
-
     @Scheduled(cron = "0 12 3/4 * * ?")
     @GetMapping("/startUpdate")
     public void startUpdate() {
@@ -44,9 +40,9 @@ public class DiscShelfController extends BaseController {
     public String findAll(@RequestParam(defaultValue = "1") int page,
                           @RequestParam(defaultValue = "20") int pageSize) {
         PageRequest pageRequest = PageRequest.of(page - 1, pageSize, Sort.by(Order.desc("id")));
-        Page<DiscShelf> results = discShelfRepository.findAll(pageRequest);
-        List<DiscShelf> content = results.getContent();
-        return objectResult(gson.toJsonTree(content), buildPage(results));
+        Page<DiscShelf> resultPage = discShelfRepository.findAll(pageRequest);
+        List<DiscShelf> resultList = resultPage.getContent();
+        return objectResult(resultList, resultPage);
     }
 
 }

@@ -12,7 +12,7 @@
 
     <groupId>mingzuozhibi</groupId>
     <artifactId>mzzb-disc-shelfs</artifactId>
-    <version>0.1.7</version>
+    <version>0.2.0</version>
 
     <name>Mzzb Disc Shelfs</name>
     <description>Mzzb Disc Shelfs For Mingzuozhibi.com</description>
@@ -27,7 +27,7 @@
         <dependency>
             <groupId>com.mingzuozhibi</groupId>
             <artifactId>mzzb-common</artifactId>
-            <version>0.3.1</version>
+            <version>0.3.5</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
