@@ -28,7 +28,8 @@ public class DiscShelfSpider {
     private JmsMessage jmsMessage;
     @Autowired
     private DiscShelfRepository discShelfRepository;
-    private Pattern hrefRegex = Pattern.compile("/dp/([A-Z0-9]+)/");
+
+    private Pattern patternOfAsin = Pattern.compile("/dp/([A-Z0-9]+)/");
 
     public void fetchFromAmazon() {
         List<DiscShelfTask> tasks = buildTasks();
@@ -87,7 +88,7 @@ public class DiscShelfSpider {
             element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
                 String type = e.text().trim();
                 String href = e.attr("href");
-                Matcher matcher = hrefRegex.matcher(href);
+                Matcher matcher = patternOfAsin.matcher(href);
                 if (matcher.find()) {
                     String asin = matcher.group(1);
                     discShelfs.add(new DiscShelf(asin, type, title));
