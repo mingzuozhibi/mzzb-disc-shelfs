@@ -84,7 +84,7 @@ public class DiscShelfSpider {
 
         List<DiscShelf> discShelfs = new LinkedList<>();
         elements.forEach(element -> {
-            String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
+            String title = element.select(".a-size-base-plus.a-color-base.a-text-normal").first().text();
             element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
                 String type = e.text().trim();
                 String href = e.attr("href");
