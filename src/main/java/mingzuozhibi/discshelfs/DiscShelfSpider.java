@@ -28,7 +28,8 @@ public class DiscShelfSpider {
     private JmsMessage jmsMessage;
     @Autowired
     private DiscShelfRepository discShelfRepository;
-    private Pattern hrefRegex = Pattern.compile("/dp/([A-Z0-9]+)/");
+
+    private Pattern patternOfAsin = Pattern.compile("/dp/([A-Z0-9]+)/");
 
     public void fetchFromAmazon() {
         List<DiscShelfTask> tasks = buildTasks();
@@ -66,6 +67,7 @@ public class DiscShelfSpider {
                 } catch (RuntimeException e) {
                     recorder.jmsErrorRow(task.getOrigin(), e);
                     writeContent(content, task.getOrigin());
+                    log.warn("捕获异常", e);
                 }
 
                 threadSleep(5);
@@ -83,11 +85,11 @@ public class DiscShelfSpider {
 
         List<DiscShelf> discShelfs = new LinkedList<>();
         elements.forEach(element -> {
-            String title = element.select(".a-size-medium.a-color-base.a-text-normal").first().text();
+            String title = element.select(".a-color-base.a-text-normal").first().text();
             element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
                 String type = e.text().trim();
                 String href = e.attr("href");
-                Matcher matcher = hrefRegex.matcher(href);
+                Matcher matcher = patternOfAsin.matcher(href);
                 if (matcher.find()) {
                     String asin = matcher.group(1);
                     discShelfs.add(new DiscShelf(asin, type, title));
