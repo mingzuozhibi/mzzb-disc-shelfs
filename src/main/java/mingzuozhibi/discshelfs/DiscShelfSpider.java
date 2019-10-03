@@ -67,6 +67,7 @@ public class DiscShelfSpider {
                 } catch (RuntimeException e) {
                     recorder.jmsErrorRow(task.getOrigin(), e);
                     writeContent(content, task.getOrigin());
+                    log.warn("捕获异常", e);
                 }
 
                 threadSleep(5);
