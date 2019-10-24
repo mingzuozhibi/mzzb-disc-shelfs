@@ -69,8 +69,6 @@ public class DiscShelfSpider {
                     writeContent(content, task.getOrigin());
                     log.warn("捕获异常", e);
                 }
-
-                threadSleep(5);
             }
         });
 
