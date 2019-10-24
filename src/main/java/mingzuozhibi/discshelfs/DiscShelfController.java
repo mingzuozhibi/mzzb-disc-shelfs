@@ -28,7 +28,7 @@ public class DiscShelfController extends BaseController {
     @Autowired
     private DiscShelfRepository discShelfRepository;
 
-    @Scheduled(cron = "0 12 3/4 * * ?")
+    @Scheduled(cron = "0 2 3/4 * * ?")
     @GetMapping("/startUpdate")
     public void startUpdate() {
         runWithDaemon(jmsMessage, "startUpdate", () -> {
