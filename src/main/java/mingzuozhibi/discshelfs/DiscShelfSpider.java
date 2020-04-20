@@ -87,7 +87,7 @@ public class DiscShelfSpider {
 
     private List<DiscShelf> parse(String content) {
         Document document = Jsoup.parseBodyFragment(content);
-        Elements elements = document.select(".s-result-list.sg-row > div[data-asin]");
+        Elements elements = document.select(".s-result-list.sg-row > div[data-asin][data-uuid]");
 
         List<DiscShelf> discShelfs = new LinkedList<>();
         elements.forEach(element -> {
