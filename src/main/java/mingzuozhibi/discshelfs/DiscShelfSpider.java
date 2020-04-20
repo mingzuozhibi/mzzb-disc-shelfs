@@ -31,14 +31,22 @@ public class DiscShelfSpider {
 
     private Pattern patternOfAsin = Pattern.compile("/dp/([A-Z0-9]+)/");
 
+    public void testFetch() {
+        fetchFromAmazon(buildTasks().subList(0, 1));
+    }
+
     public void fetchFromAmazon() {
-        List<DiscShelfTask> tasks = buildTasks();
+        fetchFromAmazon(buildTasks());
+    }
+
+    public void fetchFromAmazon(List<DiscShelfTask> tasks) {
         SpiderRecorder recorder = new SpiderRecorder("上架信息", tasks.size(), jmsMessage);
         recorder.jmsStartUpdate();
 
         doInSessionFactory(factory -> {
             for (DiscShelfTask task : tasks) {
-                if (recorder.checkBreakCount(5)) break;
+                if (recorder.checkBreakCount(5))
+                    break;
                 recorder.jmsStartUpdateRow(task.getOrigin());
 
                 Result<String> bodyResult = waitResult(factory, task.getUrl());
@@ -83,13 +91,14 @@ public class DiscShelfSpider {
 
         List<DiscShelf> discShelfs = new LinkedList<>();
         elements.forEach(element -> {
-            String title = element.select(".a-color-base.a-text-normal").first().text();
+
             element.select(".a-size-base.a-link-normal.a-text-bold").forEach(e -> {
                 String type = e.text().trim();
                 String href = e.attr("href");
                 Matcher matcher = patternOfAsin.matcher(href);
                 if (matcher.find()) {
                     String asin = matcher.group(1);
+                    String title = element.select(".a-color-base.a-text-normal").first().text();
                     discShelfs.add(new DiscShelf(asin, type, title));
                 }
             });

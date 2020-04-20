@@ -36,6 +36,13 @@ public class DiscShelfController extends BaseController {
         });
     }
 
+    @GetMapping("/testUpdate")
+    public void testUpdate() {
+        runWithDaemon(jmsMessage, "testUpdate", () -> {
+            discShelfSpider.testFetch();
+        });
+    }
+
     @GetMapping("/discShelfs")
     public String findAll(@RequestParam(defaultValue = "1") int page,
                           @RequestParam(defaultValue = "20") int pageSize) {
