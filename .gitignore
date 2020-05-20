@@ -1,4 +1,5 @@
 ### Project ###
+amazon/cookie
 config/application.properties
 record/
 *.log
