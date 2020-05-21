@@ -71,7 +71,7 @@ public class DiscShelfSpider {
                 int divCount = 0;
 
                 for (String text : content.split(Pattern.quote("\n&&&\n"))) {
-                    if (text.startsWith("[ \"dispatch\", \"data-search-results:search-result-")) {
+                    if (text.contains(":search-result-")) {
                         String jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
                         JsonObject json = gson.fromJson(jsonText, JsonObject.class);
                         String html = json.get("html").getAsString();
